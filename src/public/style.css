@@ -421,3 +421,14 @@ body {
 .hidden {
     display: none !important;
 }
+.neon-btn {
+    position: relative;
+    z-index: 100;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+}
+
+.player-card {
+    position: relative;
+    z-index: 100;
+}
