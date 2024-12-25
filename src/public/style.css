@@ -159,6 +159,7 @@ body {
     color: var(--text-color);
     background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
     border: none;
+    pointer-events: auto;
     border-radius: 8px;
     cursor: pointer;
     position: relative;
