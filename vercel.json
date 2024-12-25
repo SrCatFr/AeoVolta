@@ -12,36 +12,12 @@
   ],
   "rewrites": [
     {
-      "source": "/socket.io/(.*)",
-      "destination": "index.js"
+      "source": "/socket.io/:path*",
+      "destination": "/index.js"
     },
     {
-      "source": "/assets/:path*",
-      "destination": "/src/public/assets/:path*"
-    },
-    {
-      "source": "/js/:path*",
-      "destination": "/src/public/js/:path*"
-    },
-    {
-      "source": "/shared/:path*",
-      "destination": "/src/public/shared/:path*"
-    },
-    {
-      "source": "/style.css",
-      "destination": "/src/public/style.css"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "index.js"
+      "source": "/:path*",
+      "destination": "/index.js"
     }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  },
-  "regions": ["cdg1"],
-  "github": {
-    "enabled": true,
-    "silent": true
-  }
+  ]
 }
