@@ -1,250 +1,215 @@
 const express = require('express');
 const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
 const path = require('path');
-
-// Importar clases del juego
-const CONSTANTS = require('./src/shared/constants');
-const Ball = require('./src/game/Ball');
-const Player = require('./src/game/Player');
-const Field = require('./src/game/Field');
-const Score = require('./src/game/Score');
-const Timer = require('./src/game/Timer');
-const Physics = require('./src/game/Physics');
-
-// Configuración de Express
-// En index.js, después de la configuración de express.static
-app.use('/shared', express.static(path.join(__dirname, 'src/shared')));
-
-// En tu index.js
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.header(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-  );
-  next();
+const server = require('http').createServer(app);
+const io = require('socket.io')(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"],
+        transports: ['websocket', 'polling'],
+        credentials: true
+    },
+    allowEIO3: true,
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 
-
+// Configuración de middleware
 app.use(express.static(path.join(__dirname, 'src/public')));
-// Al inicio del archivo, después de las importaciones
+app.use(express.json());
+
+// Middleware para CORS
 app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
     next();
 });
 
-// Añade manejo de errores
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).send('Something broke!');
-});
+// Estado global del juego
+const gameRooms = new Map();
+const waitingPlayers = new Map();
 
+// Ruta principal
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'src/public/index.html'));
 });
 
-// Añade una ruta de prueba
-app.get('/test', (req, res) => {
-    res.json({ status: 'ok' });
-});
-
-
-// Gestión de juegos activos
-const activeGames = new Map();
-const waitingPlayers = [];
-
-class Game {
-    constructor(player1, player2) {
-        this.id = `game_${Date.now()}`;
-        this.field = new Field();
-        this.ball = new Ball();
-        this.score = new Score();
-        this.timer = new Timer(120); // 2 minutos
-
-        this.players = {
-            [player1.id]: new Player(player1.id, player1.name, 'left'),
-            [player2.id]: new Player(player2.id, player2.name, 'right')
-        };
-
-        this.timer.start();
-        this.gameLoop = null;
-    }
-
-    start() {
-        this.gameLoop = setInterval(() => this.update(), 1000 / 60);
-    }
-
-    update() {
-        // Actualizar estado del juego
-        if (this.timer.isTimeUp()) {
-            this.end();
-            return;
-        }
-
-        // Actualizar posiciones
-        Object.values(this.players).forEach(player => {
-            player.update(player.input || { x: 0, y: 0 });
-        });
-        this.ball.update();
-
-        // Comprobar colisiones
-        this.checkCollisions();
-
-        // Comprobar goles
-        const goalSide = this.field.checkGoal(this.ball);
-        if (goalSide) {
-            this.score.addGoal(goalSide);
-            this.ball.reset();
-            Object.values(this.players).forEach(player => player.reset());
-        }
-
-        // Emitir estado actualizado
-        this.emitGameState();
-    }
-
-    checkCollisions() {
-        // Colisiones jugador-pelota
-        Object.values(this.players).forEach(player => {
-            if (Physics.checkCollision(player, this.ball)) {
-                Physics.resolveCollision(player, this.ball);
-            }
-        });
-
-        // Colisiones con paredes
-        this.field.checkWallCollision(this.ball);
-        Object.values(this.players).forEach(player => {
-            this.field.checkWallCollision(player);
-        });
-    }
-
-    emitGameState() {
-        const gameState = {
-            ball: this.ball.getState(),
-            players: Object.values(this.players).map(p => p.getState()),
-            score: this.score.getState(),
-            timer: this.timer.getState()
-        };
-
-        io.to(this.id).emit('game_state', gameState);
-    }
-
-    end() {
-        clearInterval(this.gameLoop);
-        const result = {
-            winner: this.score.getWinner(),
-            score: this.score.getState(),
-            players: Object.values(this.players).map(p => ({
-                id: p.id,
-                name: p.name,
-                side: p.side
-            }))
-        };
-        io.to(this.id).emit('game_over', result);
-        activeGames.delete(this.id);
-    }
-
-    handlePlayerInput(playerId, input) {
-        if (this.players[playerId]) {
-            this.players[playerId].input = input;
-        }
-    }
-}
-
-// Configuración de Socket.IO
+// Manejo de Socket.IO
 io.on('connection', (socket) => {
-    console.log('Player connected:', socket.id);
+    console.log('Cliente conectado:', socket.id);
 
     socket.on('join_game', (playerName) => {
-        console.log(`Player ${playerName} (${socket.id}) wants to join a game`);
-
-        const playerData = {
+        console.log(`${playerName} quiere unirse al juego`);
+        
+        const player = {
             id: socket.id,
             name: playerName,
             socket: socket
         };
 
-        if (waitingPlayers.length > 0) {
-            console.log('Found opponent, creating game...');
-            const opponent = waitingPlayers.pop();
-            const game = new Game(opponent, playerData);
-
-            console.log(`Game created: ${game.id}`);
-
-            opponent.socket.join(game.id);
-            socket.join(game.id);
-
-            activeGames.set(game.id, game);
-
-            console.log('Notifying players...');
-            opponent.socket.emit('game_start', {
-                gameId: game.id,
-                side: 'left',
-                opponent: playerName
-            });
-            socket.emit('game_start', {
-                gameId: game.id,
-                side: 'right',
-                opponent: opponent.name
-            });
-
-            game.start();
-            console.log('Game started');
+        // Buscar oponente disponible
+        const opponent = findOpponent(player);
+        if (opponent) {
+            // Crear nueva partida
+            createGame(player, opponent);
         } else {
-            console.log(`Player ${playerName} added to waiting list`);
-            waitingPlayers.push(playerData);
+            // Añadir a la cola de espera
+            waitingPlayers.set(socket.id, player);
             socket.emit('waiting_for_opponent');
         }
     });
 
     socket.on('player_input', (data) => {
-        const game = Array.from(activeGames.values())
-            .find(g => g.players[socket.id]);
-
+        const game = findGameByPlayerId(socket.id);
         if (game) {
-            game.handlePlayerInput(socket.id, data.input);
+            updateGameState(game, socket.id, data.input);
         }
     });
 
     socket.on('disconnect', () => {
-        console.log('Player disconnected:', socket.id);
-
-        // Remover de la lista de espera
-        const waitingIndex = waitingPlayers.findIndex(p => p.id === socket.id);
-        if (waitingIndex !== -1) {
-            waitingPlayers.splice(waitingIndex, 1);
-        }
-
-        // Terminar juego activo si está en uno
-        const game = Array.from(activeGames.values())
-            .find(g => g.players[socket.id]);
-
-        if (game) {
-            // Notificar al otro jugador
-            Object.values(game.players).forEach(player => {
-                if (player.id !== socket.id) {
-                    io.to(player.id).emit('opponent_disconnected');
-                }
-            });
-            game.end();
-        }
+        console.log('Cliente desconectado:', socket.id);
+        handlePlayerDisconnect(socket.id);
     });
 });
 
+function findOpponent(player) {
+    for (const [id, waitingPlayer] of waitingPlayers) {
+        if (id !== player.id) {
+            waitingPlayers.delete(id);
+            return waitingPlayer;
+        }
+    }
+    return null;
+}
+
+function createGame(player1, player2) {
+    const gameId = `game_${Date.now()}`;
+    const game = {
+        id: gameId,
+        players: {
+            left: player1,
+            right: player2
+        },
+        state: initializeGameState(),
+        interval: null
+    };
+
+    // Unir jugadores a la sala
+    player1.socket.join(gameId);
+    player2.socket.join(gameId);
+
+    // Notificar inicio de juego
+    player1.socket.emit('game_start', {
+        gameId: gameId,
+        side: 'left',
+        teams: { left: player1.name, right: player2.name }
+    });
+
+    player2.socket.emit('game_start', {
+        gameId: gameId,
+        side: 'right',
+        teams: { left: player1.name, right: player2.name }
+    });
+
+    // Iniciar bucle del juego
+    game.interval = setInterval(() => {
+        updateGame(game);
+    }, 1000 / 60);
+
+    gameRooms.set(gameId, game);
+}
+
+function initializeGameState() {
+    return {
+        ball: {
+            x: CONSTANTS.FIELD.WIDTH / 2,
+            y: CONSTANTS.FIELD.HEIGHT / 2,
+            vx: 0,
+            vy: 0,
+            radius: CONSTANTS.BALL.RADIUS
+        },
+        players: {},
+        score: { left: 0, right: 0 },
+        timer: {
+            time: CONSTANTS.GAME.DURATION,
+            formatted: "2:00"
+        }
+    };
+}
+
+function updateGameState(game, playerId, input) {
+    if (!game.state.players[playerId]) {
+        game.state.players[playerId] = {
+            x: 0,
+            y: 0,
+            vx: 0,
+            vy: 0,
+            radius: CONSTANTS.PLAYER.RADIUS
+        };
+    }
+
+    const player = game.state.players[playerId];
+    player.vx = input.x * CONSTANTS.PLAYER.SPEED;
+    player.vy = input.y * CONSTANTS.PLAYER.SPEED;
+}
+
+function updateGame(game) {
+    // Actualizar posiciones
+    updatePositions(game);
+
+    // Verificar colisiones
+    checkCollisions(game);
+
+    // Verificar goles
+    checkGoals(game);
+
+    // Actualizar timer
+    updateTimer(game);
+
+    // Emitir estado actualizado
+    io.to(game.id).emit('game_state', game.state);
+}
+
+function handlePlayerDisconnect(playerId) {
+    // Remover de la cola de espera
+    waitingPlayers.delete(playerId);
+
+    // Buscar y terminar juego activo
+    for (const [gameId, game] of gameRooms) {
+        if (game.players.left.id === playerId || game.players.right.id === playerId) {
+            endGame(game, 'disconnect');
+            break;
+        }
+    }
+}
+
+function endGame(game, reason) {
+    clearInterval(game.interval);
+    
+    if (reason === 'disconnect') {
+        io.to(game.id).emit('opponent_disconnected');
+    } else {
+        const winner = game.state.score.left > game.state.score.right ? 'left' : 'right';
+        io.to(game.id).emit('game_over', {
+            winner,
+            score: game.state.score
+        });
+    }
+
+    gameRooms.delete(game.id);
+}
+
 // Manejo de errores
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).send('¡Algo salió mal!');
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+// Puerto para Vercel
+const port = process.env.PORT || 3000;
+server.listen(port, () => {
+    console.log(`Servidor corriendo en puerto ${port}`);
 });
 
-// Iniciar servidor
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-});
+module.exports = app;
