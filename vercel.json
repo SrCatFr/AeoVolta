@@ -40,12 +40,6 @@
     "NODE_ENV": "production"
   },
   "regions": ["cdg1"],
-  "functions": {
-    "index.js": {
-      "memory": 1024,
-      "maxDuration": 10
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
