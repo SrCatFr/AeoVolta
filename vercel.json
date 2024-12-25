@@ -10,62 +10,36 @@
       "use": "@vercel/static"
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/socket.io/(.*)",
-      "dest": "index.js"
+      "source": "/socket.io/(.*)",
+      "destination": "index.js"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "src/public/assets/$1"
+      "source": "/assets/:path*",
+      "destination": "/src/public/assets/:path*"
     },
     {
-      "src": "/js/(.*)",
-      "dest": "src/public/js/$1"
+      "source": "/js/:path*",
+      "destination": "/src/public/js/:path*"
     },
     {
-      "src": "/shared/(.*)",
-      "dest": "src/public/shared/$1"
+      "source": "/shared/:path*",
+      "destination": "/src/public/shared/:path*"
     },
     {
-      "src": "/style.css",
-      "dest": "src/public/style.css"
+      "source": "/style.css",
+      "destination": "/src/public/style.css"
     },
     {
-      "src": "/(.*)",
-      "dest": "index.js"
+      "source": "/(.*)",
+      "destination": "index.js"
     }
   ],
   "env": {
     "NODE_ENV": "production"
   },
   "regions": ["cdg1"],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Credentials",
-          "value": "true"
-        },
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
-        }
-      ]
-    }
-  ],
-  "cleanUrls": true,
-  "trailingSlash": false,
-  "public": true,
   "github": {
     "enabled": true,
     "silent": true
