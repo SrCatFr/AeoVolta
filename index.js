@@ -17,6 +17,19 @@ const Physics = require('./src/game/Physics');
 // En index.js, después de la configuración de express.static
 app.use('/shared', express.static(path.join(__dirname, 'src/shared')));
 
+// En tu index.js
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.header(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
+  next();
+});
+
+
 app.use(express.static(path.join(__dirname, 'src/public')));
 // Al inicio del archivo, después de las importaciones
 app.use((req, res, next) => {
