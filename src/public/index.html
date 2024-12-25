@@ -7,26 +7,23 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#2E1A47">
     <title>AeoVolta</title>
-
+    
     <!-- Fuentes -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Exo:wght@400;600;800;900&display=swap" rel="stylesheet">
-
+    
     <!-- Iconos -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-
+    
     <!-- Estilos -->
     <link rel="stylesheet" href="style.css">
-
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" href="assets/images/favicon.png">
 </head>
 <body>
     <!-- Pantalla de inicio -->
     <div id="start-screen" class="screen active">
         <div class="background-overlay"></div>
-
+        
         <!-- Logo y título -->
         <div class="logo-container">
             <h1 class="game-logo">AeoVolta</h1>
@@ -43,20 +40,7 @@
                 </div>
                 <button id="start-btn" class="neon-btn">
                     <span class="btn-content">JUGAR AHORA</span>
-                    <div class="btn-glow"></div>
                 </button>
-            </div>
-
-            <!-- Controles e instrucciones -->
-            <div class="controls-info">
-                <div class="control-item">
-                    <i class="fas fa-gamepad"></i>
-                    <span>Use el joystick para moverse</span>
-                </div>
-                <div class="control-item">
-                    <i class="fas fa-futbol"></i>
-                    <span>Toque la pelota para patear</span>
-                </div>
             </div>
         </div>
 
@@ -73,16 +57,12 @@
 
     <!-- Pantalla de juego -->
     <div id="game-screen" class="screen">
-        <div class="game-overlay"></div>
-
-        <!-- Contenedor principal del juego -->
         <div id="game-container">
             <!-- Canvas del juego -->
             <canvas id="game-canvas"></canvas>
-
-            <!-- HUD (Heads-Up Display) -->
+            
+            <!-- HUD -->
             <div class="hud-container">
-                <!-- Marcador -->
                 <div class="score-container">
                     <div class="team left">
                         <div class="team-name" id="team-left">EQUIPO A</div>
@@ -99,7 +79,7 @@
                 </div>
             </div>
 
-            <!-- Joystick virtual -->
+            <!-- Joystick -->
             <div id="joystick-container">
                 <div id="joystick-area">
                     <div class="joystick-base">
@@ -108,51 +88,26 @@
                 </div>
             </div>
 
-            <!-- Sistema de mensajes -->
+            <!-- Mensajes del juego -->
             <div id="game-messages" class="hidden">
                 <div class="message-content"></div>
             </div>
-
-            <!-- Indicador de conexión -->
-            <div id="connection-status" class="hidden">
-                <i class="fas fa-wifi"></i>
-                <span class="status-text"></span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Pantalla de fin de juego (inicialmente oculta) -->
-    <div id="game-over-screen" class="screen">
-        <div class="game-over-content">
-            <h2 class="result-title"></h2>
-            <div class="final-score"></div>
-            <button id="play-again-btn" class="neon-btn">
-                <span class="btn-content">JUGAR DE NUEVO</span>
-            </button>
         </div>
     </div>
 
     <!-- Elementos de audio -->
-    <audio id="backgroundMusic" loop preload="auto">
-        <source src="assets/audio/background.mp3" type="audio/mp3">
+    <audio id="backgroundMusic" preload="auto" loop>
+        <source src="/assets/audio/background.mp3" type="audio/mp3">
     </audio>
     <audio id="goalSound" preload="auto">
-        <source src="assets/audio/goal.mp3" type="audio/mp3">
+        <source src="/assets/audio/goal.mp3" type="audio/mp3">
     </audio>
     <audio id="whistleSound" preload="auto">
-        <source src="assets/audio/whistle.mp3" type="audio/mp3">
+        <source src="/assets/audio/whistle.mp3" type="audio/mp3">
     </audio>
     <audio id="kickSound" preload="auto">
-        <source src="assets/audio/kick.mp3" type="audio/mp3">
+        <source src="/assets/audio/kick.mp3" type="audio/mp3">
     </audio>
-
-    <!-- Loader (para carga inicial) -->
-    <div id="loader" class="loader">
-        <div class="loader-content">
-            <div class="spinner"></div>
-            <div class="loading-text">Cargando...</div>
-        </div>
-    </div>
 
     <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
@@ -161,19 +116,5 @@
     <script src="/js/renderer.js"></script>
     <script src="/js/controls.js"></script>
     <script src="/js/game.js"></script>
-
-    <!-- Script de inicialización -->
-    <script>
-        // Ocultar loader cuando todo esté cargado
-        window.addEventListener('load', () => {
-            const loader = document.getElementById('loader');
-            if (loader) {
-                loader.style.opacity = '0';
-                setTimeout(() => {
-                    loader.style.display = 'none';
-                }, 500);
-            }
-        });
-    </script>
 </body>
 </html>
