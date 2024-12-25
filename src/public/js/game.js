@@ -2,22 +2,32 @@ class Game {
     constructor() {
         console.log('Inicializando juego...');
 
-        // Inicializar Socket.IO
-        this.initializeSocket();
+        // Configuración básica del socket
+        this.socket = io({
+            transports: ['websocket', 'polling'],
+            autoConnect: false,
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            timeout: 20000
+        });
 
-        // Elementos del juego
+        // Referencias DOM
+        this.startBtn = document.getElementById('start-btn');
+        this.playerNameInput = document.getElementById('player-name');
+        this.startScreen = document.getElementById('start-screen');
+        this.gameScreen = document.getElementById('game-screen');
+        this.gameMessages = document.getElementById('game-messages');
+        this.messageContent = document.querySelector('#game-messages .message-content');
+        this.scoreLeft = document.getElementById('score-left');
+        this.scoreRight = document.getElementById('score-right');
+        this.gameTimer = document.getElementById('game-timer');
+
+        // Inicializar componentes del juego
         this.canvas = document.getElementById('game-canvas');
         this.renderer = new Renderer(this.canvas);
         this.controls = new Controls(document.getElementById('joystick-area'));
         this.audioManager = new AudioManager();
-
-        // Referencias DOM
-        this.startScreen = document.getElementById('start-screen');
-        this.gameScreen = document.getElementById('game-screen');
-        this.startBtn = document.getElementById('start-btn');
-        this.playerNameInput = document.getElementById('player-name');
-        this.gameMessages = document.getElementById('game-messages');
-        this.messageContent = document.querySelector('#game-messages .message-content');
 
         // Estado del juego
         this.gameState = {
@@ -39,28 +49,39 @@ class Game {
         this.lastUpdateTime = 0;
         this.rendererReady = false;
 
-        // Inicializar componentes
-        this.setupSocketEvents();
-        this.setupInputHandlers();
-        this.initializeRenderer();
-
+        // Inicializar
+        this.initializeGame();
         console.log('Juego inicializado');
     }
 
-    initializeSocket() {
-        console.log('Inicializando Socket.IO...');
-        this.socket = io({
-            transports: ['websocket', 'polling'],
-            reconnection: true,
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000,
-            timeout: 20000,
-            autoConnect: true
+    initializeGame() {
+        this.initializeBasicHandlers();
+        this.setupSocketEvents();
+        this.initializeRenderer();
+    }
+
+    initializeBasicHandlers() {
+        if (!this.startBtn || !this.playerNameInput) {
+            console.error('Elementos críticos no encontrados');
+            return;
+        }
+
+        // Manejar clic en el botón
+        this.startBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.handleStartButtonClick();
+        });
+
+        // Manejar Enter en el input
+        this.playerNameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.handleStartButtonClick();
+            }
         });
     }
 
     initializeRenderer() {
-        console.log('Inicializando renderer...');
         if (this.renderer) {
             setTimeout(() => {
                 this.renderer.resize();
@@ -70,24 +91,42 @@ class Game {
         }
     }
 
-    setupSocketEvents() {
-        console.log('Configurando eventos de Socket.IO...');
+    handleStartButtonClick() {
+        const playerName = this.playerNameInput.value.trim();
+        if (!playerName) {
+            this.showMessage('Por favor, ingresa un nombre', true);
+            return;
+        }
 
+        console.log('Intentando iniciar juego con nombre:', playerName);
+        this.startBtn.disabled = true;
+        this.startBtn.textContent = 'Conectando...';
+        this.connectAndJoin(playerName);
+    }
+
+    connectAndJoin(playerName) {
+        this.pendingPlayerName = playerName;
+        if (!this.socket.connected) {
+            console.log('Conectando socket...');
+            this.socket.connect();
+        } else {
+            this.emitJoinGame(playerName);
+        }
+    }
+
+    setupSocketEvents() {
         this.socket.on('connect', () => {
-            console.log('Socket conectado');
+            console.log('Conectado al servidor');
             this.isConnected = true;
-            if (this.startBtn) {
-                this.startBtn.disabled = false;
+            if (this.pendingPlayerName) {
+                this.emitJoinGame(this.pendingPlayerName);
+                this.pendingPlayerName = null;
             }
         });
 
         this.socket.on('connect_error', (error) => {
             console.error('Error de conexión:', error);
-            if (this.startBtn) {
-                this.startBtn.disabled = false;
-                this.startBtn.textContent = 'JUGAR AHORA';
-            }
-            this.showMessage('Error de conexión. Intenta de nuevo.', true);
+            this.handleConnectionError();
         });
 
         this.socket.on('waiting_for_opponent', () => {
@@ -107,9 +146,7 @@ class Game {
         });
 
         this.socket.on('opponent_disconnected', () => {
-            console.log('Oponente desconectado');
-            this.showMessage('Oponente desconectado', false);
-            setTimeout(() => location.reload(), 2000);
+            this.handleOpponentDisconnect();
         });
 
         this.socket.on('game_over', (result) => {
@@ -122,74 +159,19 @@ class Game {
         });
     }
 
-    setupInputHandlers() {
-        console.log('Configurando manejadores de entrada...');
-        
-        if (!this.startBtn || !this.playerNameInput) {
-            console.error('Elementos de entrada no encontrados');
-            return;
-        }
-
-        // Manejar clic en el botón
-        this.startBtn.onclick = (e) => {
-            e.preventDefault();
-            console.log('Botón de inicio clickeado');
-            this.handleStartGame();
-        };
-
-        // Manejar Enter en el input
-        this.playerNameInput.onkeypress = (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                console.log('Enter presionado en input');
-                this.handleStartGame();
-            }
-        };
-    }
-
-    handleStartGame() {
-        const playerName = this.playerNameInput.value.trim();
-        if (!playerName) {
-            console.log('Nombre de jugador vacío');
-            this.showMessage('Por favor, ingresa un nombre', true);
-            return;
-        }
-
-        console.log('Iniciando juego para:', playerName);
-        
-        if (this.startBtn) {
-            this.startBtn.disabled = true;
-            this.startBtn.textContent = 'Conectando...';
-        }
-
-        if (!this.socket.connected) {
-            console.log('Reconectando socket...');
-            this.socket.connect();
-            this.socket.once('connect', () => {
-                this.emitJoinGame(playerName);
-            });
-        } else {
-            this.emitJoinGame(playerName);
-        }
-    }
-
     emitJoinGame(playerName) {
-        console.log('Emitiendo join_game para:', playerName);
+        console.log('Emitiendo join_game con nombre:', playerName);
         this.socket.emit('join_game', playerName);
     }
 
     transitionToGame() {
-        console.log('Transicionando a pantalla de juego');
-        if (this.startScreen && this.gameScreen) {
-            this.startScreen.style.display = 'none';
-            this.gameScreen.style.display = 'block';
-
-            setTimeout(() => {
-                if (this.renderer) {
-                    this.renderer.resize();
-                }
-            }, 100);
-        }
+        this.startScreen.style.display = 'none';
+        this.gameScreen.style.display = 'block';
+        setTimeout(() => {
+            if (this.renderer) {
+                this.renderer.resize();
+            }
+        }, 100);
     }
 
     setupGame(data) {
@@ -214,13 +196,15 @@ class Game {
         if (!state) return;
         this.gameState = state;
 
-        const scoreLeft = document.getElementById('score-left');
-        const scoreRight = document.getElementById('score-right');
-        const gameTimer = document.getElementById('game-timer');
-
-        if (scoreLeft && state.score) scoreLeft.textContent = state.score.left;
-        if (scoreRight && state.score) scoreRight.textContent = state.score.right;
-        if (gameTimer && state.timer) gameTimer.textContent = state.timer.formatted;
+        if (this.scoreLeft && state.score) {
+            this.scoreLeft.textContent = state.score.left;
+        }
+        if (this.scoreRight && state.score) {
+            this.scoreRight.textContent = state.score.right;
+        }
+        if (this.gameTimer && state.timer) {
+            this.gameTimer.textContent = state.timer.formatted;
+        }
     }
 
     startGameLoop() {
@@ -235,14 +219,12 @@ class Game {
         const now = performance.now();
         this.lastUpdateTime = now;
 
-        if (this.controls) {
+        if (this.controls && this.gameId) {
             const input = this.controls.getInput();
-            if (this.gameId) {
-                this.socket.emit('player_input', {
-                    gameId: this.gameId,
-                    input: input
-                });
-            }
+            this.socket.emit('player_input', {
+                gameId: this.gameId,
+                input: input
+            });
         }
 
         this.render();
@@ -270,7 +252,6 @@ class Game {
     }
 
     showMessage(message, isTemporary = false) {
-        console.log('Mostrando mensaje:', message);
         if (this.messageContent && this.gameMessages) {
             this.messageContent.textContent = message;
             this.gameMessages.classList.remove('hidden');
@@ -305,6 +286,17 @@ class Game {
         }, 1000);
     }
 
+    handleConnectionError() {
+        this.startBtn.disabled = false;
+        this.startBtn.textContent = 'JUGAR AHORA';
+        this.showMessage('Error de conexión. Por favor, intenta de nuevo.', true);
+    }
+
+    handleOpponentDisconnect() {
+        this.showMessage('Oponente desconectado', false);
+        setTimeout(() => location.reload(), 2000);
+    }
+
     handleGameOver(result) {
         this.isPlaying = false;
         const message = `
@@ -333,5 +325,5 @@ class Game {
 // Inicialización cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM cargado, creando instancia del juego');
-    window.gameInstance = new Game();
+    window.game = new Game();
 });
