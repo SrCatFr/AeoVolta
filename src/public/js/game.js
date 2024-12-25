@@ -3,13 +3,7 @@ class Game {
         console.log('Inicializando juego...');
 
         // Inicializar Socket.IO
-        this.socket = io({
-            transports: ['websocket', 'polling'],
-            reconnection: true,
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000,
-            timeout: 20000
-        });
+        this.initializeSocket();
 
         // Elementos del juego
         this.canvas = document.getElementById('game-canvas');
@@ -45,7 +39,7 @@ class Game {
         this.lastUpdateTime = 0;
         this.rendererReady = false;
 
-        // Inicialización
+        // Inicializar componentes
         this.setupSocketEvents();
         this.setupInputHandlers();
         this.initializeRenderer();
@@ -53,7 +47,20 @@ class Game {
         console.log('Juego inicializado');
     }
 
+    initializeSocket() {
+        console.log('Inicializando Socket.IO...');
+        this.socket = io({
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            timeout: 20000,
+            autoConnect: true
+        });
+    }
+
     initializeRenderer() {
+        console.log('Inicializando renderer...');
         if (this.renderer) {
             setTimeout(() => {
                 this.renderer.resize();
@@ -63,44 +70,28 @@ class Game {
         }
     }
 
-    setupInputHandlers() {
-        console.log('Configurando controles...');
-
-        if (this.startBtn && this.playerNameInput) {
-            this.startBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                const playerName = this.playerNameInput.value.trim();
-                if (playerName) {
-                    console.log('Iniciando juego con nombre:', playerName);
-                    this.joinGame(playerName);
-                }
-            });
-
-            this.playerNameInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const playerName = this.playerNameInput.value.trim();
-                    if (playerName) {
-                        this.joinGame(playerName);
-                    }
-                }
-            });
-        }
-    }
-
     setupSocketEvents() {
+        console.log('Configurando eventos de Socket.IO...');
+
         this.socket.on('connect', () => {
-            console.log('Conectado al servidor');
+            console.log('Socket conectado');
             this.isConnected = true;
+            if (this.startBtn) {
+                this.startBtn.disabled = false;
+            }
         });
 
         this.socket.on('connect_error', (error) => {
             console.error('Error de conexión:', error);
-            this.handleConnectionError();
+            if (this.startBtn) {
+                this.startBtn.disabled = false;
+                this.startBtn.textContent = 'JUGAR AHORA';
+            }
+            this.showMessage('Error de conexión. Intenta de nuevo.', true);
         });
 
         this.socket.on('waiting_for_opponent', () => {
-            console.log('Esperando oponente...');
+            console.log('Esperando oponente');
             this.transitionToGame();
             this.showMessage('Esperando oponente...', true);
         });
@@ -131,22 +122,60 @@ class Game {
         });
     }
 
-    joinGame(playerName) {
+    setupInputHandlers() {
+        console.log('Configurando manejadores de entrada...');
+        
+        if (!this.startBtn || !this.playerNameInput) {
+            console.error('Elementos de entrada no encontrados');
+            return;
+        }
+
+        // Manejar clic en el botón
+        this.startBtn.onclick = (e) => {
+            e.preventDefault();
+            console.log('Botón de inicio clickeado');
+            this.handleStartGame();
+        };
+
+        // Manejar Enter en el input
+        this.playerNameInput.onkeypress = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                console.log('Enter presionado en input');
+                this.handleStartGame();
+            }
+        };
+    }
+
+    handleStartGame() {
+        const playerName = this.playerNameInput.value.trim();
+        if (!playerName) {
+            console.log('Nombre de jugador vacío');
+            this.showMessage('Por favor, ingresa un nombre', true);
+            return;
+        }
+
+        console.log('Iniciando juego para:', playerName);
+        
         if (this.startBtn) {
             this.startBtn.disabled = true;
             this.startBtn.textContent = 'Conectando...';
         }
 
-        console.log('Emitiendo join_game');
-        this.socket.emit('join_game', playerName);
+        if (!this.socket.connected) {
+            console.log('Reconectando socket...');
+            this.socket.connect();
+            this.socket.once('connect', () => {
+                this.emitJoinGame(playerName);
+            });
+        } else {
+            this.emitJoinGame(playerName);
+        }
     }
 
-    handleConnectionError() {
-        if (this.startBtn) {
-            this.startBtn.disabled = false;
-            this.startBtn.textContent = 'JUGAR AHORA';
-        }
-        this.showMessage('Error de conexión. Intenta de nuevo.', true);
+    emitJoinGame(playerName) {
+        console.log('Emitiendo join_game para:', playerName);
+        this.socket.emit('join_game', playerName);
     }
 
     transitionToGame() {
@@ -168,7 +197,6 @@ class Game {
         this.playerSide = data.side;
         this.isPlaying = true;
 
-        // Actualizar nombres de equipos
         if (data.teams) {
             const teamLeft = document.getElementById('team-left');
             const teamRight = document.getElementById('team-right');
@@ -186,7 +214,6 @@ class Game {
         if (!state) return;
         this.gameState = state;
 
-        // Actualizar UI
         const scoreLeft = document.getElementById('score-left');
         const scoreRight = document.getElementById('score-right');
         const gameTimer = document.getElementById('game-timer');
@@ -228,7 +255,6 @@ class Game {
         this.renderer.clear();
         this.renderer.drawField();
 
-        // Dibujar jugadores
         if (this.gameState.players) {
             Object.values(this.gameState.players).forEach(player => {
                 const color = player.side === 'left' ? 
@@ -238,14 +264,14 @@ class Game {
             });
         }
 
-        // Dibujar pelota
         if (this.gameState.ball) {
             this.renderer.drawBall(this.gameState.ball);
         }
     }
 
     showMessage(message, isTemporary = false) {
-        if (this.gameMessages && this.messageContent) {
+        console.log('Mostrando mensaje:', message);
+        if (this.messageContent && this.gameMessages) {
             this.messageContent.textContent = message;
             this.gameMessages.classList.remove('hidden');
             
@@ -306,6 +332,6 @@ class Game {
 
 // Inicialización cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM cargado, iniciando juego');
+    console.log('DOM cargado, creando instancia del juego');
     window.gameInstance = new Game();
 });
